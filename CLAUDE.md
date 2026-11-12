@@ -97,5 +97,6 @@ Background script (`src/background/index.ts`) routes messages:
 ## Jeet fork notes
 
 - This repo is "Jeet的社媒工具", a fork of leaperone/MultiPost-Extension for Card2Dream.
-- The main UI is `src/tabs/console.tsx` (X / TikTok / YouTube only). The toolbar popup just opens it.
+- The main UI is `src/tabs/console.tsx` + `src/console/` (小红书 / Threads / X / TikTok / YouTube). The toolbar popup just opens it.
+- `src/console/app.ts` is plain JS ported from the old single-file web console (`@ts-nocheck`, lint disabled in biome.json).
 - Keep changes to upstream files minimal so `git merge upstream/main` stays easy; record fork changes in `NOTICE`.

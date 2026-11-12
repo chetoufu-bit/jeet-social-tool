@@ -1,6 +1,6 @@
 # Jeet的社媒工具
 
-Card2Dream 内部用的社媒发布插件：一次编辑，发到 **X、TikTok、YouTube**。
+通用的社媒发布插件：在插件自带的控制台里编辑，一次发到 **小红书、Threads、X、TikTok、YouTube**。
 基于开源项目 [MultiPost](https://github.com/leaperone/MultiPost-Extension)（Apache-2.0）修改，修改内容见 [NOTICE](./NOTICE)。
 
 ## 安装（每台电脑一次）
@@ -16,8 +16,12 @@ Card2Dream 内部用的社媒发布插件：一次编辑，发到 **X、TikTok�
 
 ## 使用要点
 
-- 默认 **只填好不发布**：插件打开各平台发布页并填好内容，人工检查后手动点发布。
-- 标题只用于 YouTube（≤100 字）；标签在 YouTube 放在说明末尾，在 X / TikTok 跟在正文后。
+- 每个平台有独立文案框；各平台发一样的内容时，写在“通用文案”里点 **同步到所有平台**。
+- 每个平台单独的 **自动发布** 开关：不勾时只打开发布页并填好内容，人工检查后手动点发布。
+- 小红书必须有图、标题 ≤20 字；TikTok、YouTube 必须有视频；YouTube 标题 ≤100 字，标签放在说明末尾。
+- X、Threads 可以选“带图”或“带视频”。视频可选本地文件（不限大小）或 https 链接。
+- 草稿库：新建、导入草稿 JSON、“同步仓库”读取 `gh-pages` 分支的 `drafts.json`（地址可在“平台设置”里改）。
+- “平台设置”（选填）：隐藏用不到的平台、给这个浏览器起个名字显示在顶部。
 - 发布时 **不要关闭控制台页面**，各平台标签页要从这里读取视频文件，等上传开始后再关。
 - 草稿和发布记录保存在当前浏览器里，不会跨电脑同步。
 
@@ -31,6 +35,6 @@ git fetch upstream
 git merge upstream/main
 ```
 
-## 网页版控制台
+## drafts.json
 
-`gh-pages` 分支上的发布控制台网页：<https://chetoufu-bit.github.io/jeet-social-tool/>
+把草稿 JSON 放到本仓库 `gh-pages` 分支根目录的 `drafts.json`，控制台里点“同步仓库”即可导入。

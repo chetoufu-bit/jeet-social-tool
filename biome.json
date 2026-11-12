@@ -73,5 +73,13 @@
     "linter": {
       "enabled": true
     }
-  }
+  },
+  "overrides": [
+    {
+      "include": ["src/console/app.ts"],
+      "linter": {
+        "enabled": false
+      }
+    }
+  ]
 }
