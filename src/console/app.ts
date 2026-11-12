@@ -1,4 +1,4 @@
-import { PLATFORMS, buildData } from "~console/platforms";
+import { PLATFORMS, POST_TYPES, buildData, specFor, supportsType, typeLabel } from "~console/platforms";
 // @ts-nocheck
 /**
  * Jeet fork: built-in publishing console logic.
@@ -24,7 +24,6 @@ export function initConsole(): void {
   const PMAP = Object.fromEntries(PLATFORMS.map((p) => [p.key, p]));
   const COLORS = ["#5b3df5", "#1f6f5c", "#d9480f", "#c2255c", "#1971c2", "#495057"];
   const PUBLISH_GAP_MS = 3000; // 每个平台单独打开，中间稍等一下
-  const DEFAULT_DRAFTS_URL = "https://raw.githubusercontent.com/chetoufu-bit/jeet-social-tool/gh-pages/drafts.json";
   const LS_DRAFTS = "pub.drafts.v1";
   const LS_PREFS = "pub.prefs.v1";
   const LS_SETTINGS = "pub.settings.v1";
@@ -303,6 +302,7 @@ export function initConsole(): void {
       common: emptyPart(),
       videoSource: "file",
       videoUrl: "",
+      type: "image",
       published: {},
     };
     for (const p of PLATFORMS) d[p.key] = emptyPart();
@@ -348,6 +348,16 @@ export function initConsole(): void {
       d.videoSource = "url";
       d.videoUrl = vurl;
     }
+    const TYPE_ALIASES = {
+      text: "text",
+      纯文字: "text",
+      文字: "text",
+      image: "image",
+      图文: "image",
+      video: "video",
+      视频: "video",
+    };
+    d.type = TYPE_ALIASES[raw.type] || (d.videoSource === "url" ? "video" : "image");
     d.published = raw.published || {};
     return d;
   }
@@ -397,10 +407,10 @@ export function initConsole(): void {
     return { title: p.hasTitle ? c.title || "" : "", content: c.content || "", tags: normTags(c.tags) };
   }
   function syncCommonToAll(d, { silent = false } = {}) {
-    for (const p of enabledPlatforms()) d[p.key] = commonFor(p, d.common);
+    for (const p of draftPlatforms(d)) d[p.key] = commonFor(p, d.common);
     touch();
     if (!silent) {
-      for (const p of enabledPlatforms()) {
+      for (const p of draftPlatforms(d)) {
         const card = $(`.card[data-p="${p.key}"]`);
         if (!card) continue;
         const part = d[p.key];
@@ -427,7 +437,7 @@ export function initConsole(): void {
           .join("");
         return `<div class="draft-item ${d.id === currentId ? "active" : ""}" data-id="${esc(d.id)}">
         <div class="t">${esc(d.topic)}</div>
-        <div class="m">${d.suggestedTime ? `<span>${esc(d.suggestedTime)}</span>` : `<span>${fmtTime(d.updatedAt)}</span>`}${tags}</div>
+        <div class="m"><span class="tag">${POST_TYPES.find((t) => t.key === draftType(d))?.name}</span>${d.suggestedTime ? `<span>${esc(d.suggestedTime)}</span>` : `<span>${fmtTime(d.updatedAt)}</span>`}${tags}</div>
       </div>`;
       })
       .join("");
@@ -445,8 +455,15 @@ export function initConsole(): void {
     }
   }
 
-  const usesImages = () => enabledPlatforms().some((p) => p.kind === "dynamic");
-  const usesVideo = () => enabledPlatforms().some((p) => p.needVideo || p.allowVideo);
+  /* ---------- 内容类型：纯文字 / 图文 / 视频 ---------- */
+  const draftType = (d) => (d && ["text", "image", "video"].includes(d.type) ? d.type : "image");
+  // 当前草稿能发的平台（已按类型换成对应的 MultiPost 平台）
+  const draftPlatforms = (d = current()) =>
+    enabledPlatforms()
+      .filter((p) => supportsType(p, draftType(d)))
+      .map((p) => specFor(p, draftType(d)));
+  const usesImages = () => draftType(current()) === "image";
+  const usesVideo = () => draftType(current()) === "video";
 
   async function renderEditor() {
     const main = $("#main");
@@ -457,7 +474,9 @@ export function initConsole(): void {
       return;
     }
     currentImages = await idb.get(d.id);
-    const plats = enabledPlatforms();
+    const type = draftType(d);
+    const plats = draftPlatforms(d);
+    const unsupported = enabledPlatforms().filter((p) => !supportsType(p, type));
     const anyTitle = plats.some((p) => p.hasTitle);
     main.innerHTML = `
       <div id="banner"></div>
@@ -471,11 +490,16 @@ export function initConsole(): void {
           <input type="text" id="fTime" value="${esc(d.suggestedTime)}" placeholder="例如：今晚 21:00">
         </div>
       </div>
+      <div style="margin-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span class="small" style="margin:0;color:var(--muted);font-size:12px">内容类型</span>
+        <div class="seg" id="fType">${POST_TYPES.map((t) => `<label class="${type === t.key ? "on" : ""}"><input type="radio" name="ptype" value="${t.key}">${t.name}</label>`).join("")}</div>
+        ${unsupported.length ? `<span style="font-size:12px;color:var(--muted)">${unsupported.map((p) => `${p.name} 只支持${typeLabel(p)}`).join("；")}</span>` : ""}
+      </div>
       <div class="media-row">
         ${
           usesImages()
             ? `<div>
-          <label class="small">配图（图文平台共用；小红书必须有图，X 只取前 4 张）${d.imageNote ? " · 配图建议：" + esc(d.imageNote) : ""}</label>
+          <label class="small">配图（至少 1 张；X 只取前 4 张，Threads 前 10 张）${d.imageNote ? " · 配图建议：" + esc(d.imageNote) : ""}</label>
           <div class="images" id="images"></div>
         </div>`
             : ""
@@ -483,7 +507,7 @@ export function initConsole(): void {
         ${
           usesVideo()
             ? `<div>
-          <label class="small">视频（TikTok、YouTube 必须有；X、Threads 可选带）</label>
+          <label class="small">视频（所有勾选的平台都发这个视频）</label>
           <div class="video-box">
             <div class="seg" id="vSrc">
               <label class="${d.videoSource !== "url" ? "on" : ""}"><input type="radio" name="vsrc" value="file">本地文件</label>
@@ -517,7 +541,7 @@ export function initConsole(): void {
         <label class="small">话题标签（空格分隔，不用写 #）</label>
         <input type="text" id="cTags" value="${esc(tagsToText(d.common.tags))}">
       </div>
-      <div class="cards">${plats.map(cardHTML).join("") || `<div class="empty">这个浏览器还没选平台，点右上角“平台设置”</div>`}</div>
+      <div class="cards">${plats.map(cardHTML).join("") || `<div class="empty">没有能发这种内容的平台（可在右上角“平台设置”里打开）</div>`}</div>
       <div style="margin-top:16px;display:flex;gap:8px">
         <button class="ghost" id="btnDelete">删除这条草稿</button>
       </div>`;
@@ -533,18 +557,13 @@ export function initConsole(): void {
     const part = d[p.key];
     const n = accName(p);
     const pub = d.published?.[p.key];
-    const imgSwitch =
-      p.kind === "dynamic" && !p.needImage
-        ? `<label class="switch" title="是否把上面的配图一起发到这个平台"><input type="checkbox" data-img ${prefs.withImg[p.key] !== false ? "checked" : ""}>带图</label>`
-        : "";
-    const vidSwitch = p.allowVideo
-      ? `<label class="switch" title="是否把上面的视频一起发到这个平台（带视频时不带图）"><input type="checkbox" data-vid ${prefs.withVideo[p.key] ? "checked" : ""}>带视频</label>`
-      : "";
+    const imgSwitch = "";
+    const vidSwitch = "";
     return `<div class="card ${prefs.selected[p.key] ? "" : "off"}" data-p="${p.key}">
       <div class="card-h">
         <span class="badge" style="background:${p.color}"></span>
         <span class="name">${p.name}</span>
-        <span class="kind">${p.kind === "video" ? "视频" : p.needImage ? "图文" : "动态"}</span>
+        <span class="kind">${p.needVideo ? "视频" : p.needImage ? "图文" : "文字"}</span>
         <span class="acc">${n ? "@" + esc(n) : ""}</span>
         <div class="right">
           ${imgSwitch}${vidSwitch}
@@ -559,7 +578,7 @@ export function initConsole(): void {
         <div class="count" data-tc></div>`
           : ""
       }
-      <label class="small">${p.kind === "video" ? "说明" : "正文"}</label>
+      <label class="small">${p.needVideo ? "说明" : "正文"}</label>
       <textarea data-f="content">${esc(part.content)}</textarea>
       <label class="small">话题标签（空格分隔，不用写 #）${p.tagsInDesc ? "· 会放在说明末尾" : ""}</label>
       <input type="text" data-f="tags" value="${esc(tagsToText(part.tags))}">
@@ -574,13 +593,11 @@ export function initConsole(): void {
   }
 
   function mediaPlan(p, d) {
-    // 返回该平台实际会带的图片/视频
-    const video = currentVideo(d);
-    if (p.kind === "video") return { images: [], video };
-    const wantVideo = p.allowVideo && prefs.withVideo[p.key] && video;
-    if (wantVideo) return { images: [], video };
-    const useImg = p.needImage || prefs.withImg[p.key] !== false;
-    return { images: useImg ? currentImages.slice(0, p.maxImages) : [], video: null };
+    // 返回该平台实际会带的图片/视频（由内容类型决定）
+    const type = draftType(d);
+    if (type === "video") return { images: [], video: currentVideo(d) };
+    if (type === "image") return { images: currentImages.slice(0, p.maxImages || 18), video: null };
+    return { images: [], video: null };
   }
 
   function updateCount(p) {
@@ -600,18 +617,13 @@ export function initConsole(): void {
     }
     const hint = [];
     const video = currentVideo(d);
-    if (p.needImage && !currentImages.length) hint.push(`${p.name}图文笔记必须至少 1 张图`);
-    if (p.needVideo && !video) hint.push(`${p.name} 需要视频`);
-    if (p.allowVideo && prefs.withVideo[p.key]) {
-      if (!video) hint.push("勾了带视频，但还没有视频");
-      else if (currentImages.length && prefs.withImg[p.key] !== false) hint.push("带视频时不会带图");
-    }
+    if (p.needImage && !currentImages.length) hint.push("图文需要至少 1 张图");
+    if (p.needVideo && !video) hint.push("还没有视频");
     const plan = mediaPlan(p, d);
-    if (p.kind === "dynamic" && p.maxImages && currentImages.length > p.maxImages && plan.images.length)
-      hint.push(`只会带前 ${p.maxImages} 张图`);
+    if (p.needImage && p.maxImages && currentImages.length > p.maxImages) hint.push(`只会带前 ${p.maxImages} 张图`);
     $("[data-hint]", card).textContent = hint.join("；");
   }
-  const updateAllCounts = () => enabledPlatforms().forEach(updateCount);
+  const updateAllCounts = () => draftPlatforms().forEach(updateCount);
 
   function renderImages() {
     const el = $("#images");
@@ -795,7 +807,7 @@ export function initConsole(): void {
       if (prefs.linked) syncCommonToAll(d);
     };
     $("#btnSyncAll").onclick = () => {
-      const plats = enabledPlatforms();
+      const plats = draftPlatforms(d);
       const changed = plats.filter((p) => {
         const cur = d[p.key],
           want = commonFor(p, d.common);
@@ -811,7 +823,16 @@ export function initConsole(): void {
       toast(`已同步到 ${plats.map((p) => p.name).join("、")}`);
     };
 
-    for (const p of enabledPlatforms()) {
+    document.querySelectorAll("#fType input").forEach(
+      (r) =>
+        (r.onchange = () => {
+          d.type = r.value;
+          touch();
+          renderList();
+          renderEditor();
+        }),
+    );
+    for (const p of draftPlatforms(d)) {
       const card = $(`.card[data-p="${p.key}"]`);
       card.querySelectorAll("[data-f]").forEach(
         (inp) =>
@@ -895,16 +916,15 @@ export function initConsole(): void {
     for (const p of targets) {
       const part = d[p.key];
       const plan = mediaPlan(p, d);
-      if (!part.content.trim() && p.kind === "dynamic" && !plan.images.length && !plan.video)
-        problems.push(`${p.name} 正文是空的`);
+      if (!part.content.trim() && !plan.images.length && !plan.video) problems.push(`${p.name} 正文是空的`);
       if (countFor(p, d) > p.max) problems.push(`${p.name} 超出字数`);
-      if (p.hasTitle && (p.titleRequired || p.needImage) && !part.title.trim()) problems.push(`${p.name} 缺标题`);
+      if (p.hasTitle && p.titleRequired && !part.title.trim()) problems.push(`${p.name} 缺标题`);
       if (p.hasTitle && [...part.title].length > p.titleMax) problems.push(`${p.name} 标题超过 ${p.titleMax} 字`);
       if (p.hasTitle && /[<>]/.test(part.title) && p.key === "youtube") problems.push("YouTube 标题里不能有 < 或 >");
-      if (p.needImage && !currentImages.length) problems.push(`${p.name} 需要至少 1 张图`);
-      if (p.needVideo && !video) problems.push(`${p.name} 需要视频`);
+      if (p.needImage && !currentImages.length) problems.push("图文需要至少 1 张图");
+      if (p.needVideo && !video) problems.push("视频内容还没有选视频");
     }
-    return problems;
+    return [...new Set(problems)];
   }
 
   /* ---------- 定时发布 ---------- */
@@ -923,7 +943,7 @@ export function initConsole(): void {
   function openSchedule() {
     const d = current();
     if (!d) return toast("先选一条草稿");
-    const targets = enabledPlatforms().filter((p) => prefs.selected[p.key]);
+    const targets = draftPlatforms(d).filter((p) => prefs.selected[p.key]);
     if (!targets.length) return toast("至少勾选一个平台");
     const problems = validate(d, targets);
     if (problems.length) return alert("定时前请先处理：\n\n· " + problems.join("\n· "));
@@ -941,7 +961,7 @@ export function initConsole(): void {
     if (!at || Number.isNaN(at)) return alert("请选择时间");
     if (at < Date.now() + 60 * 1000) return alert("时间至少要在 1 分钟之后");
     const auto = $("#schedAuto").checked;
-    const targets = enabledPlatforms().filter((p) => prefs.selected[p.key]);
+    const targets = draftPlatforms(d).filter((p) => prefs.selected[p.key]);
     const v = currentVideo(d);
     let video = null;
     const needVideo = targets.some((p) => mediaPlan(p, d).video);
@@ -1078,7 +1098,7 @@ export function initConsole(): void {
     const d = current();
     if (!d) return toast("先选一条草稿");
     if (publishing) return;
-    const targets = enabledPlatforms().filter((p) => prefs.selected[p.key]);
+    const targets = draftPlatforms(d).filter((p) => prefs.selected[p.key]);
     if (!targets.length) return toast("至少勾选一个平台");
 
     const problems = validate(d, targets);
@@ -1165,6 +1185,7 @@ export function initConsole(): void {
     } finally {
       publishing = false;
       $("#btnPublish").disabled = false;
+      renderBanner();
       if (results.length) {
         const v = currentVideo(d);
         addHistory({ at: Date.now(), space, draftId: d.id, topic: d.topic, results, video: v ? v.name : "" });
@@ -1177,7 +1198,6 @@ export function initConsole(): void {
   function openSettings() {
     draftSettings = JSON.parse(JSON.stringify(settings));
     $("#setSpace").value = draftSettings.space;
-    $("#setDraftsUrl").value = draftSettings.draftsUrl || DEFAULT_DRAFTS_URL;
     renderSettings();
     $("#dlgSettings").showModal();
   }
@@ -1196,7 +1216,7 @@ export function initConsole(): void {
       );
     $("#setPlatforms").innerHTML = PLATFORMS.map(
       (p) => `<label class="pf-opt ${draftSettings.enabled.includes(p.key) ? "on" : ""}">
-        <input type="checkbox" data-k="${p.key}" ${draftSettings.enabled.includes(p.key) ? "checked" : ""}>${p.name}<span class="kind">${p.kind === "video" ? "视频" : "图文"}</span></label>`,
+        <input type="checkbox" data-k="${p.key}" ${draftSettings.enabled.includes(p.key) ? "checked" : ""}>${p.name}<span class="kind">${typeLabel(p)}</span></label>`,
     ).join("");
     $("#setPlatforms")
       .querySelectorAll("[data-k]")
@@ -1214,7 +1234,6 @@ export function initConsole(): void {
   $("#btnSettingsCancel").onclick = () => $("#dlgSettings").close();
   $("#btnSettingsOk").onclick = () => {
     draftSettings.space = $("#setSpace").value.trim();
-    draftSettings.draftsUrl = $("#setDraftsUrl").value.trim() || DEFAULT_DRAFTS_URL;
     if (!draftSettings.enabled.length) return alert("至少选一个平台。");
     draftSettings.enabled = PLATFORMS.map((p) => p.key).filter((k) => draftSettings.enabled.includes(k));
     settings = draftSettings;
@@ -1231,6 +1250,7 @@ export function initConsole(): void {
   /* ---------- 全局绑定 ---------- */
   $("#btnNew").onclick = () => {
     const d = blankDraft();
+    d.type = draftType(current()); // 沿用当前草稿的类型
     drafts.unshift(d);
     saveDrafts();
     currentId = d.id;
@@ -1260,21 +1280,6 @@ export function initConsole(): void {
       toast(`导入完成：新增 ${added} 条，更新 ${updated} 条`);
     } catch (e) {
       alert("格式不对，没能解析：\n" + e.message);
-    }
-  };
-  $("#btnSync").onclick = async () => {
-    try {
-      const url = (settings.draftsUrl || DEFAULT_DRAFTS_URL).trim();
-      const res = await fetch(url + (url.includes("?") ? "&" : "?") + "_=" + Date.now(), { cache: "no-store" });
-      if (!res.ok) throw new Error(res.status === 404 ? "仓库里还没有 drafts.json" : "HTTP " + res.status);
-      const list = parseImport(await res.text());
-      const { added, updated } = mergeDrafts(list);
-      if (!currentId) currentId = drafts[0]?.id;
-      renderList();
-      renderEditor();
-      toast(`同步完成：新增 ${added} 条，更新 ${updated} 条`);
-    } catch (e) {
-      toast("同步失败：" + e.message);
     }
   };
   $("#btnExport").onclick = () => {

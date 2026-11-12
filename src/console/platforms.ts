@@ -21,11 +21,21 @@ export interface PlatformDef {
   maxImages?: number;
   allowVideo?: boolean;
   tagsInDesc?: boolean;
+  /** MultiPost platform name for each post type this platform supports */
+  mps: Partial<Record<PostType, string>>;
 }
+
+export type PostType = "text" | "image" | "video";
+export const POST_TYPES: { key: PostType; name: string }[] = [
+  { key: "text", name: "纯文字" },
+  { key: "image", name: "图文" },
+  { key: "video", name: "视频" },
+];
 
 export const PLATFORMS: PlatformDef[] = [
   {
     key: "xhs",
+    mps: { image: "DYNAMIC_REDNOTE", video: "VIDEO_REDNOTE" },
     name: "小红书",
     mp: "DYNAMIC_REDNOTE",
     account: "rednote",
@@ -33,6 +43,7 @@ export const PLATFORMS: PlatformDef[] = [
     kind: "dynamic",
     hasTitle: true,
     titleMax: 20,
+    titleRequired: true,
     max: 1000,
     tagStyle: "xhs",
     needImage: true,
@@ -41,6 +52,7 @@ export const PLATFORMS: PlatformDef[] = [
   },
   {
     key: "threads",
+    mps: { text: "DYNAMIC_THREADS", image: "DYNAMIC_THREADS", video: "DYNAMIC_THREADS" },
     name: "Threads",
     mp: "DYNAMIC_THREADS",
     account: "threads",
@@ -54,6 +66,7 @@ export const PLATFORMS: PlatformDef[] = [
   },
   {
     key: "x",
+    mps: { text: "DYNAMIC_X", image: "DYNAMIC_X", video: "DYNAMIC_X" },
     name: "X",
     mp: "DYNAMIC_X",
     account: "x",
@@ -68,6 +81,7 @@ export const PLATFORMS: PlatformDef[] = [
   },
   {
     key: "tiktok",
+    mps: { video: "VIDEO_TIKTOK" },
     name: "TikTok",
     mp: "VIDEO_TIKTOK",
     account: "tiktok",
@@ -80,6 +94,7 @@ export const PLATFORMS: PlatformDef[] = [
   },
   {
     key: "youtube",
+    mps: { video: "VIDEO_YOUTUBE" },
     name: "YouTube",
     mp: "VIDEO_YOUTUBE",
     account: "youtube",
@@ -208,3 +223,24 @@ export function fileNameFromUrl(u: string, fallback: string) {
     return fallback;
   }
 }
+
+export const supportsType = (p: PlatformDef, type: PostType) => !!p.mps[type];
+
+/** Platform definition specialised for one post type (which MultiPost platform, which media). */
+export function specFor(p: PlatformDef, type: PostType): PlatformDef {
+  const mp = p.mps[type] || p.mp;
+  const isVideoMp = mp.startsWith("VIDEO_");
+  return {
+    ...p,
+    mp,
+    kind: isVideoMp ? "video" : "dynamic",
+    needImage: type === "image",
+    needVideo: type === "video",
+    allowVideo: false,
+  };
+}
+
+export const typeLabel = (p: PlatformDef) =>
+  POST_TYPES.filter((t) => p.mps[t.key])
+    .map((t) => t.name)
+    .join(" / ");
