@@ -1,59 +1,36 @@
-<div align="center">
-<img src="https://github.com/user-attachments/assets/b30c6c81-9c8b-4c78-a2df-9266b84b6f14" width="200" height="200" alt="MultiPost Logo" />
+# Jeet的社媒工具
 
-# MultiPost
+Card2Dream 内部用的社媒发布插件：一次编辑，发到 **X、TikTok、YouTube**。
+基于开源项目 [MultiPost](https://github.com/leaperone/MultiPost-Extension)（Apache-2.0）修改，修改内容见 [NOTICE](./NOTICE)。
 
-![GitHub License GitHub许可证](https://img.shields.io/github/license/leaper-one/MultiPost-Extension) ![GitHub Repo stars GitHub星星](https://img.shields.io/github/stars/leaper-one/MultiPost-Extension) ![GitHub commit activity GitHub提交活动](https://img.shields.io/github/commit-activity/m/leaper-one/MultiPost-Extension) [![Website 网站](https://img.shields.io/website?url=https%3A%2F%2Fmultipost.app)](https://multipost.app) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/leaperone/MultiPost-Extension)
+## 安装（每台电脑一次）
 
-[English](README.md) | [中文](docs/README-zh.md) | [日本語](docs/README-jp.md) | [Français](docs/README-fr.md) | [한국어](docs/README-kr.md)
+1. 打开本仓库的 **Actions** 页 → 点最新一次成功的 “Build extension” → 页面底部 **Artifacts** 下载 `jeet-social-tool`，解压。
+   （打了 `v` 开头的版本标签时，也可以在 **Releases** 里下载 zip。）
+2. Chrome 地址栏打开 `chrome://extensions`，右上角打开 **开发者模式**。
+3. 点 **加载已解压的扩展程序**，选择刚解压出来的文件夹（里面直接有 `manifest.json` 的那一层）。
+4. 在这个 Chrome 里登录 X、TikTok、YouTube（Studio）。
+5. 点工具栏上的插件图标，打开发布控制台。
 
-> A browser extension that helps users publish content to multiple social media platforms with one click.
-> 一个用于在多个社交平台上发布内容的浏览器扩展。
+更新：下载新版本解压后，覆盖原文件夹，再在 `chrome://extensions` 里点插件卡片上的刷新按钮。
 
-⭐ If you find this project helpful, please consider giving it a star! Your support helps us grow and improve! ⭐
-</div>
+## 使用要点
 
-## Open-source snapshot / 开源部分
+- 默认 **只填好不发布**：插件打开各平台发布页并填好内容，人工检查后手动点发布。
+- 标题只用于 YouTube（≤100 字）；标签在 YouTube 放在说明末尾，在 X / TikTok 跟在正文后。
+- 发布时 **不要关闭控制台页面**，各平台标签页要从这里读取视频文件，等上传开始后再关。
+- 草稿和发布记录保存在当前浏览器里，不会跨电脑同步。
 
-This repository contains the Apache-2.0 open-source components of the MultiPost extension. The MultiPost monorepo builds and publishes the official Chrome and Edge packages, which also include the proprietary Agent module. This repository maintains source code only and does not run release workflows.
+## 合并原项目更新
 
-本仓库维护 MultiPost 扩展的 Apache-2.0 开源部分。Chrome 和 Edge 商店中的 MultiPost 扩展由主仓库构建和发布，包含未在本仓库公开的 Agent 模块。本仓库只维护源码，不运行发布流水线。
+平台改版导致填写失效时，先看原项目有没有修复：
 
-## 主要功能 / Key Features
-- 一键发布内容（文本、图片、视频等）到多个平台。（支持知乎、微博、小红书、抖音等10多个主流平台）无需登录、无需注册、无需API Key。完全免费！
-  Post your content (text, images, videos, etc.) to multiple platforms with one click. (Over 10 mainstream platforms including TikTok, YouTube Zhihu, Weibo, Xiaohongshu, TikTok, etc.) No login, no registration, no API Key required. Free!
-- 两种API接口 / 2 types of API Interface:
-  - 扩展API：在您自己的Web应用中调用扩展的API发布内容。
-    Extension API: Calling the extension's API to publish content in your own web app.
-  - RESTful API：在脚本或服务器中调用RESTful API发布内容。
-    RESTful API: Calling the RESTful API to publish content in your script or server.
+```bash
+git remote add upstream https://github.com/leaperone/MultiPost-Extension.git   # 只需一次
+git fetch upstream
+git merge upstream/main
+```
 
-该扩展解决了内容创作者在多平台发布时的痛点。通过一次编辑，内容可以同步到所有平台，大大提高工作效率。
-This extension solves the pain points of content creators when publishing across multiple platforms. Through a single edit, content can be synchronized to all platforms, greatly improving work efficiency.
+## 网页版控制台
 
-## How to start
-- [multipost.app](https://multipost.app) - Official website
-- [Documentation | 文档](https://docs.multipost.app)
-- [Developer Documentation | 开发者文档](https://multipost.app/docs/development)
-- [MultiPost Article Editor](https://md.multipost.app/) - [(Repo)](https://github.com/leaperone/multipost-wechat-markdown-editor) - Online editor for creating and publishing content to multiple platforms.
-- [Chrome extension - ![Chrome Web Store Version Chrome网上商店版本](https://img.shields.io/chrome-web-store/v/dhohkaclnjgcikfoaacfgijgjgceofih)](https://chromewebstore.google.com/detail/multipost/dhohkaclnjgcikfoaacfgijgjgceofih) ![Chrome Web Store Users Chrome网上商店用户](https://img.shields.io/chrome-web-store/users/dhohkaclnjgcikfoaacfgijgjgceofih) ![Chrome Web Store Last Updated](https://img.shields.io/chrome-web-store/last-updated/dhohkaclnjgcikfoaacfgijgjgceofih)
-- [Edge extension - ![](https://img.shields.io/badge/dynamic/json?label=edge%20add-on&prefix=v&query=%24.version&url=https%3A%2F%2Fmicrosoftedge.microsoft.com%2Faddons%2Fgetproductdetailsbycrxid%2Fckoiphiceimehjkolnfffgbmihoppgjg)](https://microsoftedge.microsoft.com/addons/detail/multipost/ckoiphiceimehjkolnfffgbmihoppgjg) [![](https://img.shields.io/badge/dynamic/json?label=users&query=%24.activeInstallCount&url=https%3A%2F%2Fmicrosoftedge.microsoft.com%2Faddons%2Fgetproductdetailsbycrxid%2Fckoiphiceimehjkolnfffgbmihoppgjg)](https://microsoftedge.microsoft.com/addons/detail/multipost/ckoiphiceimehjkolnfffgbmihoppgjg)
-<!-- ![Edge add-on last updated](https://img.shields.io/badge/dynamic/json?label=last%20updated&query=%24.lastUpdateDate&url=https%3A%2F%2Fmicrosoftedge.microsoft.com%2Faddons%2Fgetproductdetailsbycrxid%2Fckoiphiceimehjkolnfffgbmihoppgjg) -->
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=leaperone/multipost-wechat-markdown-editor,leaperone/MultiPost-Extension&type=Date)](https://www.star-history.com/#leaperone/multipost-wechat-markdown-editor&leaperone/MultiPost-Extension&Date)
-
-## Contact Us
-- [Discord](https://discord.gg/GNsCX9zFwQ)
-- 微信群
-  - 微信扫一扫加入 MultiPost 微信群
-    <img src="docs/multipost-wechat-group.jpg" width="350" alt="MultiPost WeChat Group QR Code" />
-- [点击加入腾讯频道【MultiPost】](https://pd.qq.com/s/ajj47bgjb) ，频道号：multipostapp
-- Email: [support@undersky.ai](mailto:support@undersky.ai)（UnderSky / Agent 模型账户；MultiPost 扩展问题请用 GitHub Issues）
-- [GitHub Issues](https://github.com/leaperone/MultiPost-Extension/issues)
-- 腾讯频道
-  - 微信扫一扫
-    <img src="https://github.com/user-attachments/assets/1044058f-036e-4942-af07-e4bd48a1e1d6" width="350" alt="MultiPost Tencent Channel Wechat" />
-  - QQ 扫一扫
-    <img src="https://github.com/user-attachments/assets/fc9edf3b-1ed5-4aa7-99f9-b39dcab3f449" width="350" alt="MultiPost Tencent Channel QQ" />
+`gh-pages` 分支上的发布控制台网页：<https://chetoufu-bit.github.io/jeet-social-tool/>
