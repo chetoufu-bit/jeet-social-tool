@@ -8,8 +8,8 @@
     "description": "Multipost Extension"
   },
   "extensionDescription": {
-    "message": "Card2Dream 内部社媒发布工具：一次编辑，发布到 X、TikTok、YouTube。基于开源项目 MultiPost 修改。",
-    "description": "Card2Dream 内部社媒发布工具：一次编辑，发布到 X、TikTok、YouTube。基于开源项目 MultiPost 修改。"
+    "message": "社媒发布工具",
+    "description": "社媒发布工具"
   },
   "gDynamic": {
     "message": "动态",

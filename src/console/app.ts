@@ -5,6 +5,7 @@
  * background directly (MULTIPOST_EXTENSION_PUBLISH_NOW) and hands files to platform tabs
  * as blob:/data: URLs.
  */
+import { MISSED_MS, clearAlarm, deleteJob, getJob, listJobs, openDb, putJob, scheduleAlarm } from "~console/scheduler";
 import { refreshAccountInfo } from "~sync/account";
 
 let started = false;
@@ -204,14 +205,7 @@ export function initConsole(): void {
   /* ---------- 图片存储（IndexedDB，避免 localStorage 装不下） ---------- */
   const idb = (() => {
     let dbp;
-    const open = () =>
-      dbp ||
-      (dbp = new Promise((res, rej) => {
-        const r = indexedDB.open("publisher", 1);
-        r.onupgradeneeded = () => r.result.createObjectStore("images");
-        r.onsuccess = () => res(r.result);
-        r.onerror = () => rej(r.error);
-      }));
+    const open = () => dbp || (dbp = openDb());
     const tx = async (mode, fn) => {
       const db = await open();
       return new Promise((res, rej) => {
@@ -772,6 +766,7 @@ export function initConsole(): void {
       size: file.size,
       dataUrl: blobUrl,
       previewUrl: blobUrl,
+      file,
     });
     log(`视频已就绪：${file.name}（${mb(file.size)}）`);
     if (current()?.id === d.id) {
@@ -953,13 +948,7 @@ export function initConsole(): void {
   }
 
   /* ---------- 发布 ---------- */
-  async function publish() {
-    const d = current();
-    if (!d) return toast("先选一条草稿");
-    if (publishing) return;
-    const targets = enabledPlatforms().filter((p) => prefs.selected[p.key]);
-    if (!targets.length) return toast("至少勾选一个平台");
-
+  function validate(d, targets) {
     const problems = [];
     const video = currentVideo(d);
     if (d.videoSource === "url" && d.videoUrl.trim() && !video) problems.push("视频链接必须以 https:// 开头");
@@ -975,6 +964,209 @@ export function initConsole(): void {
       if (p.needImage && !currentImages.length) problems.push(`${p.name} 需要至少 1 张图`);
       if (p.needVideo && !video) problems.push(`${p.name} 需要视频`);
     }
+    return problems;
+  }
+
+  function buildData(p, part, plan) {
+    const tags = normTags(part.tags);
+    if (p.kind === "video") {
+      return {
+        title: p.hasTitle ? part.title.trim() : "", // TikTok 会把 title 拼进说明，所以留空
+        // YouTube 会把 tags 拼进标题，容易超过 100 字，所以标签改放在说明末尾
+        content: p.tagsInDesc && tags.length ? `${part.content}\n\n${hashTags(tags)}` : part.content,
+        video: plan.video,
+        tags: p.tagsInDesc ? [] : tags,
+      };
+    }
+    return {
+      title: p.hasTitle ? part.title : "", // X、Threads 会把 title 拼进正文，所以留空
+      content: part.content,
+      images: plan.images.map((im, k) => ({
+        name: im.name || `image-${k + 1}.png`,
+        url: im.dataUrl,
+        type: im.type,
+        size: im.size,
+      })),
+      videos: plan.video ? [plan.video] : [],
+      tags,
+    };
+  }
+
+  /* ---------- 定时发布 ---------- */
+  function pad(n) {
+    return String(n).padStart(2, "0");
+  }
+  function toLocalInput(t) {
+    const d = new Date(t);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  function fmtFull(t) {
+    const d = new Date(t);
+    return `${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function openSchedule() {
+    const d = current();
+    if (!d) return toast("先选一条草稿");
+    const targets = enabledPlatforms().filter((p) => prefs.selected[p.key]);
+    if (!targets.length) return toast("至少勾选一个平台");
+    const problems = validate(d, targets);
+    if (problems.length) return alert("定时前请先处理：\n\n· " + problems.join("\n· "));
+    const next = new Date(Date.now() + 60 * 60 * 1000);
+    next.setMinutes(0, 0, 0);
+    $("#schedAt").value = toLocalInput(next.getTime());
+    $("#schedAuto").checked = true;
+    $("#schedInfo").textContent = `草稿「${d.topic}」→ ${targets.map((p) => p.name).join("、")}`;
+    $("#dlgSchedule").showModal();
+  }
+
+  async function confirmSchedule() {
+    const d = current();
+    const at = new Date($("#schedAt").value).getTime();
+    if (!at || Number.isNaN(at)) return alert("请选择时间");
+    if (at < Date.now() + 60 * 1000) return alert("时间至少要在 1 分钟之后");
+    const auto = $("#schedAuto").checked;
+    const targets = enabledPlatforms().filter((p) => prefs.selected[p.key]);
+    const v = currentVideo(d);
+    let video = null;
+    const needVideo = targets.some((p) => mediaPlan(p, d).video);
+    if (needVideo && v) {
+      if (d.videoSource === "url") video = { url: d.videoUrl.trim(), name: v.name, type: v.type, size: 0 };
+      else {
+        const lv = localVideos.get(d.id);
+        if (!lv?.file) return alert("请重新选择一次视频文件");
+        video = { blob: lv.file, name: lv.name, type: lv.type, size: lv.size };
+      }
+    }
+    const placeholder = video ? { __video: true, name: video.name, type: video.type, size: video.size } : null;
+    const steps = targets.map((p) => {
+      const plan = mediaPlan(p, d);
+      if (plan.video) plan.video = placeholder;
+      return {
+        key: p.key,
+        name: p.name,
+        syncData: { platforms: [{ name: p.mp }], isAutoPublish: auto, data: buildData(p, d[p.key], plan) },
+      };
+    });
+    const job = {
+      id: uid(),
+      at,
+      createdAt: Date.now(),
+      draftId: d.id,
+      topic: d.topic,
+      space: settings.space || "",
+      auto,
+      steps,
+      video,
+      status: "pending",
+    };
+    try {
+      await putJob(job);
+      await scheduleAlarm(job);
+    } catch (e) {
+      return alert("保存定时任务失败：" + e.message);
+    }
+    $("#dlgSchedule").close();
+    toast(`已定时：${fmtFull(at)}`);
+    log(`已创建定时任务「${d.topic}」：${fmtFull(at)}，${targets.map((p) => p.name).join("、")}`);
+    refreshJobCount();
+  }
+
+  const STATUS_TEXT = {
+    pending: "等待中",
+    running: "执行中",
+    done: "已执行",
+    failed: "有失败",
+    missed: "已错过",
+    cancelled: "已取消",
+  };
+  async function refreshJobCount() {
+    try {
+      const jobs = await listJobs();
+      const n = jobs.filter((j) => j.status === "pending").length;
+      $("#btnJobs").textContent = n ? `定时任务（${n}）` : "定时任务";
+      const missed = jobs.filter((j) => j.status === "missed").length;
+      if (missed) log(`有 ${missed} 个定时任务错过了，可在“定时任务”里立即发布`);
+    } catch (e) {
+      console.debug(e);
+    }
+  }
+  async function renderJobs() {
+    const jobs = await listJobs();
+    const el = $("#jobList");
+    if (!jobs.length) {
+      el.innerHTML = `<div class="empty">还没有定时任务</div>`;
+      return;
+    }
+    el.innerHTML = jobs
+      .map((j) => {
+        const late = j.status === "pending" && Date.now() - j.at > MISSED_MS;
+        const res = (j.results || [])
+          .map(
+            (r) => `<span class="${r.ok ? "ok" : "bad"}">${esc(r.name)} ${r.ok ? "✓" : "✗ " + esc(r.msg || "")}</span>`,
+          )
+          .join("");
+        const btns = [];
+        if (j.status === "pending") btns.push(`<button class="small" data-job-cancel="${j.id}">取消</button>`);
+        if (j.status === "missed" || j.status === "failed")
+          btns.push(`<button class="small primary" data-job-now="${j.id}">立即发布</button>`);
+        if (j.status !== "pending" && j.status !== "running")
+          btns.push(`<button class="small ghost" data-job-del="${j.id}">删除</button>`);
+        return `<div class="hist-item">
+          <div><b>${esc(j.topic)}</b> <span class="tag ${j.status === "done" ? "done" : ""}">${STATUS_TEXT[j.status] || j.status}${late ? "（已过时）" : ""}</span></div>
+          <div class="meta">${fmtFull(j.at)} · ${j.steps.map((s) => s.name).join("、")} · ${j.auto ? "到点自动发布" : "到点只填好"}${j.space ? " · " + esc(j.space) : ""}${j.video ? " · 视频：" + esc(j.video.name) : ""}</div>
+          ${j.note ? `<div class="meta">${esc(j.note)}</div>` : ""}
+          ${res ? `<div class="res">${res}</div>` : ""}
+          ${btns.length ? `<div style="display:flex;gap:6px;margin-top:4px">${btns.join("")}</div>` : ""}
+        </div>`;
+      })
+      .join("");
+    el.querySelectorAll("[data-job-cancel]").forEach(
+      (b) =>
+        (b.onclick = async () => {
+          if (!confirm("取消这个定时任务？")) return;
+          const j = await getJob(b.dataset.jobCancel);
+          if (!j) return;
+          j.status = "cancelled";
+          await putJob(j);
+          await clearAlarm(j.id);
+          renderJobs();
+          refreshJobCount();
+        }),
+    );
+    el.querySelectorAll("[data-job-now]").forEach(
+      (b) =>
+        (b.onclick = async () => {
+          const j = await getJob(b.dataset.jobNow);
+          if (!j) return;
+          if (!confirm(`现在发布「${j.topic}」到 ${j.steps.map((s) => s.name).join("、")}？`)) return;
+          j.status = "pending";
+          j.at = Date.now() + 2000;
+          j.note = "";
+          j.results = [];
+          await putJob(j);
+          await scheduleAlarm(j);
+          toast("马上开始，会打开一个执行页");
+          setTimeout(renderJobs, 1500);
+        }),
+    );
+    el.querySelectorAll("[data-job-del]").forEach(
+      (b) =>
+        (b.onclick = async () => {
+          await deleteJob(b.dataset.jobDel);
+          renderJobs();
+        }),
+    );
+  }
+
+  async function publish() {
+    const d = current();
+    if (!d) return toast("先选一条草稿");
+    if (publishing) return;
+    const targets = enabledPlatforms().filter((p) => prefs.selected[p.key]);
+    if (!targets.length) return toast("至少勾选一个平台");
+
+    const problems = validate(d, targets);
     if (problems.length) return alert("发布前请先处理：\n\n· " + problems.join("\n· "));
 
     const space = settings.space || "";
@@ -1022,30 +1214,7 @@ export function initConsole(): void {
         const part = d[p.key];
         const plan = mediaPlan(p, d);
         if (plan.video && downloaded) plan.video = downloaded;
-        const tags = normTags(part.tags);
-        let data;
-        if (p.kind === "video") {
-          data = {
-            title: p.hasTitle ? part.title.trim() : "", // TikTok 会把 title 拼进说明，所以留空
-            // YouTube 会把 tags 拼进标题，容易超过 100 字，所以标签改放在说明末尾
-            content: p.tagsInDesc && tags.length ? `${part.content}\n\n${hashTags(tags)}` : part.content,
-            video: plan.video,
-            tags: p.tagsInDesc ? [] : tags,
-          };
-        } else {
-          data = {
-            title: p.hasTitle ? part.title : "", // X、Threads 会把 title 拼进正文，所以留空
-            content: part.content,
-            images: plan.images.map((im, k) => ({
-              name: im.name || `image-${k + 1}.png`,
-              url: im.dataUrl,
-              type: im.type,
-              size: im.size,
-            })),
-            videos: plan.video ? [plan.video] : [],
-            tags,
-          };
-        }
+        const data = buildData(p, part, plan);
         const syncData = { platforms: [{ name: p.mp }], isAutoPublish: !!prefs.auto[p.key], data };
         log(`正在打开 ${p.name}（${i + 1}/${targets.length}）…`);
         const r = await bg("MULTIPOST_EXTENSION_PUBLISH_NOW", syncData, 180000);
@@ -1216,6 +1385,15 @@ export function initConsole(): void {
   $("#spaceBadge").onclick = openSettings;
   $("#btnRefreshAcc").onclick = refreshAccounts;
   $("#btnPublish").onclick = publish;
+  $("#btnSchedule").onclick = openSchedule;
+  $("#btnSchedOk").onclick = confirmSchedule;
+  $("#btnSchedCancel").onclick = () => $("#dlgSchedule").close();
+  $("#btnJobs").onclick = async () => {
+    await renderJobs();
+    $("#dlgJobs").showModal();
+  };
+  $("#btnJobsClose").onclick = () => $("#dlgJobs").close();
+  refreshJobCount();
   $("#fileInput").onchange = (e) => {
     addFiles([...e.target.files]);
     e.target.value = "";

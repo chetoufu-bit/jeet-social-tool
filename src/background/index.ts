@@ -9,6 +9,7 @@ import {
 } from "~sync/common";
 import QuantumEntanglementKeepAlive from "../utils/keep-alive";
 import { linkExtensionMessageHandler, starter } from "./services/api";
+import { initScheduler } from "./services/scheduler";
 import {
   addTabsManagerMessages,
   tabsManagerHandleTabRemoved,
@@ -29,6 +30,9 @@ async function initDefaultTrustedDomains() {
     await storage.set("trustedDomains", []);
   }
 }
+
+// Jeet fork: scheduled publishing
+initScheduler();
 
 chrome.runtime.onInstalled.addListener((object) => {
   if (object.reason === chrome.runtime.OnInstalledReason.INSTALL) {

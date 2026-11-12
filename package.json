@@ -3,7 +3,7 @@
   "displayName": "__MSG_extensionDisplayName__",
   "version": "1.5.1",
   "description": "__MSG_extensionDescription__",
-  "author": "Jeet (Card2Dream), based on MultiPost by leaperone",
+  "author": "Jeet, based on MultiPost by leaperone",
   "scripts": {
     "dev": "plasmo dev",
     "build": "plasmo build && plasmo package",
@@ -75,7 +75,18 @@
       "matches": ["http://localhost:2663/*"]
     },
     "host_permissions": ["https://*/*"],
-    "permissions": ["activeTab", "tabs", "scripting", "tabGroups", "sidePanel", "clipboardWrite", "clipboardRead"],
+    "permissions": [
+      "activeTab",
+      "tabs",
+      "scripting",
+      "tabGroups",
+      "sidePanel",
+      "clipboardWrite",
+      "clipboardRead",
+      "alarms",
+      "notifications",
+      "unlimitedStorage"
+    ],
     "web_accessible_resources": [
       {
         "resources": ["assets/icon.png"],
