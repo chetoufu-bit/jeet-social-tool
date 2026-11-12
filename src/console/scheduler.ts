@@ -9,7 +9,7 @@
  */
 
 export const DB_NAME = "publisher";
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 export const ALARM_PREFIX = "jeet-job-";
 /** A job that fires this much later than planned (computer asleep, Chrome closed) is not published automatically. */
 export const MISSED_MS = 30 * 60 * 1000;
@@ -58,6 +58,7 @@ export function openDb(): Promise<IDBDatabase> {
         const db = r.result;
         if (!db.objectStoreNames.contains("images")) db.createObjectStore("images");
         if (!db.objectStoreNames.contains("jobs")) db.createObjectStore("jobs", { keyPath: "id" });
+        if (!db.objectStoreNames.contains("inbox")) db.createObjectStore("inbox", { keyPath: "id" });
       };
       r.onsuccess = () => resolve(r.result);
       r.onerror = () => reject(r.error);
@@ -66,7 +67,11 @@ export function openDb(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
-async function tx<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest | undefined) {
+export async function tx<T>(
+  store: string,
+  mode: IDBTransactionMode,
+  fn: (s: IDBObjectStore) => IDBRequest | undefined,
+) {
   const db = await openDb();
   return new Promise<T>((resolve, reject) => {
     const t = db.transaction(store, mode);
@@ -225,6 +230,22 @@ export async function runJob(id: string, log: (msg: string) => void): Promise<Jo
     for (const s of job.steps) results.push({ name: s.name, ok: false, msg });
   }
 
+  // 远程图片/视频（AI 给的 https 链接）先在本页下载成 blob，避免平台页面跨域读不到
+  const remote = new Map<string, string>();
+  // biome-ignore lint/suspicious/noExplicitAny: FileData
+  const localize = async (f: any) => {
+    if (!f || f.__video || typeof f.url !== "string" || !/^https?:\/\//i.test(f.url)) return f;
+    if (!remote.has(f.url)) {
+      const res = await fetch(f.url);
+      if (!res.ok) throw new Error(`下载失败（HTTP ${res.status}）：${f.url}`);
+      const blob = await res.blob();
+      remote.set(f.url, URL.createObjectURL(blob));
+      f.size = blob.size;
+      if (blob.type) f.type = blob.type;
+    }
+    return { ...f, url: remote.get(f.url) };
+  };
+
   if (!results.length) {
     for (let i = 0; i < job.steps.length; i++) {
       const step = job.steps[i];
@@ -236,6 +257,13 @@ export async function runJob(id: string, log: (msg: string) => void): Promise<Jo
       }
       if (data.video === null && step.syncData.data.video) {
         results.push({ name: step.name, ok: false, msg: "缺少视频" });
+        continue;
+      }
+      try {
+        if (Array.isArray(data.images)) data.images = await Promise.all(data.images.map(localize));
+      } catch (e) {
+        results.push({ name: step.name, ok: false, msg: (e as Error).message });
+        log(`${step.name} 失败：${(e as Error).message}`);
         continue;
       }
       log(`正在打开 ${step.name}（${i + 1}/${job.steps.length}）…`);

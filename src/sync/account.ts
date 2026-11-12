@@ -6,10 +6,10 @@ import { getChejiahaoAccountInfo } from "./account/chejiahao";
 import { getDayuAccountInfo } from "./account/dayu";
 import { getDewuAccountInfo } from "./account/dewu";
 import { getDouyinAccountInfo } from "./account/douyin";
+import { getRednoteAccountInfoWithProbe, getThreadsAccountInfo } from "./account/jeet-extra";
 import { getNeteaseAccountInfo } from "./account/netease";
 import { getPinduoduoAccountInfo } from "./account/pinduoduo";
 import { getQiEAccountInfo } from "./account/qie";
-import { getRednoteAccountInfo } from "./account/rednote";
 import { getSohuAccountInfo } from "./account/sohu";
 import { getTiktokAccountInfo } from "./account/tiktok";
 import { getVivoVideoAccountInfo } from "./account/vivovideo";
@@ -51,6 +51,14 @@ export const refreshAccountInfoMap: Record<
     faviconUrl: "https://pic1.zhimg.com/80/v2-9ad49e8e52b473e4c366b69bc9653a45_1440w.png",
     getAccountInfo: getTiktokAccountInfo,
   },
+  // Jeet fork: Threads login detection (tab probe)
+  threads: {
+    platformName: chrome.i18n.getMessage("platformThreads"),
+    accountKey: "threads",
+    homeUrl: "https://www.threads.com",
+    faviconUrl: "https://www.threads.com/favicon.ico",
+    getAccountInfo: getThreadsAccountInfo,
+  },
   // Jeet fork: YouTube login detection
   youtube: {
     platformName: chrome.i18n.getMessage("platformYoutube"),
@@ -71,7 +79,7 @@ export const refreshAccountInfoMap: Record<
     accountKey: "rednote",
     homeUrl: "https://creator.xiaohongshu.com",
     faviconUrl: "https://fe-video-qc.xhscdn.com/fe-platform/ed8fe781ce9e16c1bfac2cd962f0721edabe2e49.ico",
-    getAccountInfo: getRednoteAccountInfo,
+    getAccountInfo: getRednoteAccountInfoWithProbe, // Jeet fork: fallback to tab probe
   },
   bilibili: {
     platformName: chrome.i18n.getMessage("platformBilibili"),

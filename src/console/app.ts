@@ -1,3 +1,4 @@
+import { PLATFORMS, buildData } from "~console/platforms";
 // @ts-nocheck
 /**
  * Jeet fork: built-in publishing console logic.
@@ -7,6 +8,7 @@
  */
 import { MISSED_MS, clearAlarm, deleteJob, getJob, listJobs, openDb, putJob, scheduleAlarm } from "~console/scheduler";
 import { refreshAccountInfo } from "~sync/account";
+import { setProbeAllowed } from "~sync/account/tab-probe";
 
 let started = false;
 
@@ -18,77 +20,7 @@ export function initConsole(): void {
 
   /* ---------- 平台配置 ---------- */
   // kind: dynamic = 图文平台；video = 视频平台
-  const PLATFORMS = [
-    {
-      key: "xhs",
-      name: "小红书",
-      mp: "DYNAMIC_REDNOTE",
-      account: "rednote",
-      color: "#ff2442",
-      kind: "dynamic",
-      hasTitle: true,
-      titleMax: 20,
-      max: 1000,
-      tagStyle: "xhs",
-      needImage: true,
-      maxImages: 18,
-      allowVideo: false,
-    },
-    {
-      key: "threads",
-      name: "Threads",
-      mp: "DYNAMIC_THREADS",
-      account: "threads",
-      color: "#111111",
-      kind: "dynamic",
-      hasTitle: false,
-      max: 500,
-      tagStyle: "plain",
-      maxImages: 10,
-      allowVideo: true,
-    },
-    {
-      key: "x",
-      name: "X",
-      mp: "DYNAMIC_X",
-      account: "x",
-      color: "#111111",
-      kind: "dynamic",
-      hasTitle: false,
-      max: 280,
-      weighted: true,
-      tagStyle: "plain",
-      maxImages: 4,
-      allowVideo: true,
-    },
-    {
-      key: "tiktok",
-      name: "TikTok",
-      mp: "VIDEO_TIKTOK",
-      account: "tiktok",
-      color: "#25f4ee",
-      kind: "video",
-      hasTitle: false,
-      max: 2200,
-      tagStyle: "plain",
-      needVideo: true,
-    },
-    {
-      key: "youtube",
-      name: "YouTube",
-      mp: "VIDEO_YOUTUBE",
-      account: "youtube",
-      color: "#ff0000",
-      kind: "video",
-      hasTitle: true,
-      titleMax: 100,
-      titleRequired: true,
-      max: 5000,
-      tagStyle: "plain",
-      needVideo: true,
-      tagsInDesc: true,
-    },
-  ];
+  // 平台配置在 ~console/platforms，定时任务和 AI 收件箱共用
   const PMAP = Object.fromEntries(PLATFORMS.map((p) => [p.key, p]));
   const COLORS = ["#5b3df5", "#1f6f5c", "#d9480f", "#c2255c", "#1971c2", "#495057"];
   const PUBLISH_GAP_MS = 3000; // 每个平台单独打开，中间稍等一下
@@ -297,26 +229,34 @@ export function initConsole(): void {
     renderAccounts();
     updateCardAccounts();
   }
-  async function refreshAccounts() {
+  // quick = 打开控制台时的自动刷新：不打开后台标签页（小红书、Threads 保留上次手动刷新的结果）
+  async function refreshAccounts(quick = false) {
     if (refreshingAccounts) return;
     refreshingAccounts = true;
     $("#btnRefreshAcc").textContent = "刷新中…";
+    if (!quick) log("正在检查各平台登录状态（小红书、Threads 会短暂打开一个后台标签页）…");
+    setProbeAllowed(!quick);
     const keys = [...new Set(enabledPlatforms().map((p) => p.account))];
     const failed = [];
+    const withTimeout = (pr, ms) =>
+      Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error("超时")), ms))]);
     await Promise.all(
       keys.map(async (k) => {
         try {
-          await refreshAccountInfo(k);
+          await withTimeout(refreshAccountInfo(k), 40000);
         } catch (e) {
-          failed.push(k);
+          if (e?.name === "ProbeSkippedError") return;
+          failed.push(PLATFORMS.find((p) => p.account === k)?.name || k);
           console.debug("刷新账号失败", k, e);
         }
       }),
     );
+    setProbeAllowed(true);
     refreshingAccounts = false;
     $("#btnRefreshAcc").textContent = "刷新账号";
     await loadAccounts();
     if (failed.length) log(`部分平台账号读取失败：${failed.join("、")}（不影响发布）`);
+    else if (!quick) log("账号状态已更新");
   }
   function updateCardAccounts() {
     for (const p of enabledPlatforms()) {
@@ -967,31 +907,6 @@ export function initConsole(): void {
     return problems;
   }
 
-  function buildData(p, part, plan) {
-    const tags = normTags(part.tags);
-    if (p.kind === "video") {
-      return {
-        title: p.hasTitle ? part.title.trim() : "", // TikTok 会把 title 拼进说明，所以留空
-        // YouTube 会把 tags 拼进标题，容易超过 100 字，所以标签改放在说明末尾
-        content: p.tagsInDesc && tags.length ? `${part.content}\n\n${hashTags(tags)}` : part.content,
-        video: plan.video,
-        tags: p.tagsInDesc ? [] : tags,
-      };
-    }
-    return {
-      title: p.hasTitle ? part.title : "", // X、Threads 会把 title 拼进正文，所以留空
-      content: part.content,
-      images: plan.images.map((im, k) => ({
-        name: im.name || `image-${k + 1}.png`,
-        url: im.dataUrl,
-        type: im.type,
-        size: im.size,
-      })),
-      videos: plan.video ? [plan.video] : [],
-      tags,
-    };
-  }
-
   /* ---------- 定时发布 ---------- */
   function pad(n) {
     return String(n).padStart(2, "0");
@@ -1309,7 +1224,7 @@ export function initConsole(): void {
     renderAccounts();
     renderList();
     renderEditor();
-    refreshAccounts();
+    refreshAccounts(true);
     toast("设置已保存");
   };
 
@@ -1383,7 +1298,7 @@ export function initConsole(): void {
   };
   $("#btnSettings").onclick = openSettings;
   $("#spaceBadge").onclick = openSettings;
-  $("#btnRefreshAcc").onclick = refreshAccounts;
+  $("#btnRefreshAcc").onclick = () => refreshAccounts(false);
   $("#btnPublish").onclick = publish;
   $("#btnSchedule").onclick = openSchedule;
   $("#btnSchedOk").onclick = confirmSchedule;
@@ -1427,5 +1342,5 @@ export function initConsole(): void {
   renderEditor();
   renderAccounts();
   setStatus(`Jeet的社媒工具 v${chrome.runtime.getManifest().version}`);
-  loadAccounts().then(refreshAccounts);
+  loadAccounts().then(() => refreshAccounts(true));
 }
