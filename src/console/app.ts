@@ -121,7 +121,12 @@ export function initConsole(): void {
   /* ---------- 设置（每个浏览器各自一份） ---------- */
   // 默认 5 个平台全开；只用其中几个的话，可以在“平台设置”里关掉不用的
   let settings = lsGet(LS_SETTINGS, null) || { space: "", color: COLORS[0], enabled: PLATFORMS.map((p) => p.key) };
-  const enabledPlatforms = () => PLATFORMS.filter((p) => settings.enabled.includes(p.key));
+  const X_PREMIUM_MAX = 25000; // X Premium 长推文上限
+  const xPremium = () => settings.xPremium !== false; // 默认按会员处理，可在“平台设置”里关掉
+  const enabledPlatforms = () =>
+    PLATFORMS.filter((p) => settings.enabled.includes(p.key)).map((p) =>
+      p.key === "x" && xPremium() ? { ...p, max: X_PREMIUM_MAX } : p,
+    );
 
   function applySpace() {
     const name = settings.space || "";
@@ -1198,6 +1203,7 @@ export function initConsole(): void {
   function openSettings() {
     draftSettings = JSON.parse(JSON.stringify(settings));
     $("#setSpace").value = draftSettings.space;
+    $("#setXPremium").checked = draftSettings.xPremium !== false;
     renderSettings();
     $("#dlgSettings").showModal();
   }
@@ -1234,6 +1240,7 @@ export function initConsole(): void {
   $("#btnSettingsCancel").onclick = () => $("#dlgSettings").close();
   $("#btnSettingsOk").onclick = () => {
     draftSettings.space = $("#setSpace").value.trim();
+    draftSettings.xPremium = $("#setXPremium").checked;
     if (!draftSettings.enabled.length) return alert("至少选一个平台。");
     draftSettings.enabled = PLATFORMS.map((p) => p.key).filter((k) => draftSettings.enabled.includes(k));
     settings = draftSettings;
