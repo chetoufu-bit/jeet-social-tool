@@ -24,18 +24,15 @@ const storage = new Storage({
 async function initDefaultTrustedDomains() {
   const trustedDomains = await storage.get<Array<{ id: string; domain: string }>>("trustedDomains");
   if (!trustedDomains) {
-    await storage.set("trustedDomains", [
-      {
-        id: crypto.randomUUID(),
-        domain: "multipost.app",
-      },
-    ]);
+    // Jeet fork: do not trust any external website by default.
+    // The built-in console (tabs/console.html) talks to the background directly.
+    await storage.set("trustedDomains", []);
   }
 }
 
 chrome.runtime.onInstalled.addListener((object) => {
   if (object.reason === chrome.runtime.OnInstalledReason.INSTALL) {
-    chrome.tabs.create({ url: "https://multipost.app/on-install" });
+    chrome.tabs.create({ url: chrome.runtime.getURL("tabs/console.html") });
   }
   initDefaultTrustedDomains();
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });

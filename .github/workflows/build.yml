@@ -1,0 +1,46 @@
+name: Build extension
+
+on:
+  push:
+    branches: [main, jeet-v1]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      - name: Rename package
+        run: cp build/chrome-mv3-prod.zip "jeet-social-tool-${GITHUB_REF_NAME//\//-}.zip"
+
+      # Download from the run page: Actions -> this run -> Artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jeet-social-tool
+          path: build/chrome-mv3-prod/
+          retention-days: 30
+
+      # Pushing a tag like v1.0.0 also publishes a GitHub Release with the zip attached
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: jeet-social-tool-*.zip

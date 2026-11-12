@@ -16,6 +16,7 @@ import { getVivoVideoAccountInfo } from "./account/vivovideo";
 import { getXAccountInfo } from "./account/x";
 import { getYicheAccountInfo } from "./account/yiche";
 import { getYidianAccountInfo } from "./account/yidian";
+import { getYoutubeAccountInfo } from "./account/youtube";
 import { type AccountInfo, type PlatformInfo, getPlatformInfos } from "./common";
 
 // 存储账号信息的键名
@@ -49,6 +50,14 @@ export const refreshAccountInfoMap: Record<
     homeUrl: "https://www.tiktok.com",
     faviconUrl: "https://pic1.zhimg.com/80/v2-9ad49e8e52b473e4c366b69bc9653a45_1440w.png",
     getAccountInfo: getTiktokAccountInfo,
+  },
+  // Jeet fork: YouTube login detection
+  youtube: {
+    platformName: chrome.i18n.getMessage("platformYoutube"),
+    accountKey: "youtube",
+    homeUrl: "https://studio.youtube.com",
+    faviconUrl: "https://www.youtube.com/favicon.ico",
+    getAccountInfo: getYoutubeAccountInfo,
   },
   douyin: {
     platformName: chrome.i18n.getMessage("platformDouyin"),

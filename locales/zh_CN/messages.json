@@ -1,15 +1,15 @@
 {
   "extensionName": {
-    "message": "MultiPost",
+    "message": "Jeet的社媒工具",
     "description": "Multipost Extension"
   },
   "extensionDisplayName": {
-    "message": "MultiPost",
+    "message": "Jeet的社媒工具",
     "description": "Multipost Extension"
   },
   "extensionDescription": {
-    "message": "MultiPost 是一个帮助你在多个平台同步发布内容的工具。",
-    "description": "Multipost 是一个帮助你在多个平台同步发布内容的工具。"
+    "message": "Card2Dream 内部社媒发布工具：一次编辑，发布到 X、TikTok、YouTube。基于开源项目 MultiPost 修改。",
+    "description": "Card2Dream 内部社媒发布工具：一次编辑，发布到 X、TikTok、YouTube。基于开源项目 MultiPost 修改。"
   },
   "gDynamic": {
     "message": "动态",

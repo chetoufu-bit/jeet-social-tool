@@ -93,3 +93,9 @@ Background script (`src/background/index.ts`) routes messages:
 3. Add entry to corresponding InfoMap (e.g., `DynamicInfoMap` in `src/sync/dynamic.ts`)
 4. Add account getter in `src/sync/account/` if platform requires login detection
 5. Add i18n keys for platform name
+
+## Jeet fork notes
+
+- This repo is "Jeet的社媒工具", a fork of leaperone/MultiPost-Extension for Card2Dream.
+- The main UI is `src/tabs/console.tsx` (X / TikTok / YouTube only). The toolbar popup just opens it.
+- Keep changes to upstream files minimal so `git merge upstream/main` stays easy; record fork changes in `NOTICE`.

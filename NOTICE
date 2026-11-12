@@ -1,0 +1,13 @@
+Jeet的社媒工具 (Jeet Social Tool)
+Copyright 2026 Card2Dream
+
+This product is a modified version of MultiPost Extension
+(https://github.com/leaperone/MultiPost-Extension), Copyright leaperone,
+licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Changes made in this fork include:
+- Renamed the extension and replaced its icon (the MultiPost name and logo are not used).
+- Added a built-in publishing console (src/tabs/console.tsx) for X, TikTok and YouTube.
+- Toolbar icon and first-install page open the built-in console instead of multipost.app.
+- No external website is trusted by default; removed paiban.md from externally_connectable.
+- Added YouTube login detection (src/sync/account/youtube.ts).

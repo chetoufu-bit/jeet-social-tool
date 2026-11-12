@@ -3,7 +3,7 @@
   "displayName": "__MSG_extensionDisplayName__",
   "version": "1.5.1",
   "description": "__MSG_extensionDescription__",
-  "author": "leaperone",
+  "author": "Jeet (Card2Dream), based on MultiPost by leaperone",
   "scripts": {
     "dev": "plasmo dev",
     "build": "plasmo build && plasmo package",
@@ -72,7 +72,7 @@
   "manifest": {
     "default_locale": "zh_CN",
     "externally_connectable": {
-      "matches": ["https://paiban.md/*", "http://localhost:2663/*"]
+      "matches": ["http://localhost:2663/*"]
     },
     "host_permissions": ["https://*/*"],
     "permissions": ["activeTab", "tabs", "scripting", "tabGroups", "sidePanel", "clipboardWrite", "clipboardRead"],

@@ -1,15 +1,15 @@
 {
   "extensionName": {
-    "message": "MultiPost",
+    "message": "Jeet的社媒工具",
     "description": "Multipost Extension"
   },
   "extensionDisplayName": {
-    "message": "MultiPost",
+    "message": "Jeet的社媒工具",
     "description": "Multipost Extension"
   },
   "extensionDescription": {
-    "message": "MultiPost is a tool to help you sync and publish content across multiple platforms.",
-    "description": "MultiPost is a tool to help you sync and publish content across multiple platforms."
+    "message": "Card2Dream internal tool to publish to X, TikTok and YouTube in one go. Based on the open-source MultiPost extension.",
+    "description": "Card2Dream internal tool to publish to X, TikTok and YouTube in one go. Based on the open-source MultiPost extension."
   },
   "gDynamic": {
     "message": "Dynamic",
