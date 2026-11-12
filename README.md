@@ -1,6 +1,6 @@
 # Jeet的社媒工具
 
-通用的社媒发布插件：在插件自带的控制台里编辑，一次发到 **小红书、Threads、X、TikTok、YouTube**。
+社媒发布工具：在插件自带的控制台里编辑纯文字、图文、视频，一次（或定时）发到 **小红书、Threads、X、TikTok、YouTube**。所有数据都只保存在当前浏览器里。
 基于开源项目 [MultiPost](https://github.com/leaperone/MultiPost-Extension)（Apache-2.0）修改，修改内容见 [NOTICE](./NOTICE)。
 
 ## 安装（每台电脑一次）
@@ -16,11 +16,11 @@
 
 ## 使用要点
 
+- 先选 **内容类型**：纯文字（Threads、X）、图文（小红书、Threads、X）、视频（全部 5 个平台）。
 - 每个平台有独立文案框；各平台发一样的内容时，写在“通用文案”里点 **同步到所有平台**。
 - 每个平台单独的 **自动发布** 开关：不勾时只打开发布页并填好内容，人工检查后手动点发布。
-- 小红书必须有图、标题 ≤20 字；TikTok、YouTube 必须有视频；YouTube 标题 ≤100 字，标签放在说明末尾。
-- X、Threads 可以选“带图”或“带视频”。视频可选本地文件（不限大小）或 https 链接。
-- 草稿库：新建、导入草稿 JSON、“同步仓库”读取 `gh-pages` 分支的 `drafts.json`（地址可在“平台设置”里改）。
+- 小红书标题 ≤20 字；YouTube 标题 ≤100 字，标签放在说明末尾。视频可选本地文件（不限大小）或 https 链接。
+- 草稿库：新建、导入草稿 JSON（可带 `type`: text / image / video）、导出备份。
 - **定时发布**：点“⏰ 定时发布”选时间，到点插件自动打开各平台并发布。要求到点时电脑开着（锁屏可以、不能睡眠）、这个 Chrome 开着、平台保持登录；晚 30 分钟以上的任务不会自动发，可在“定时任务”里立即补发。
 - “平台设置”（选填）：隐藏用不到的平台、给这个浏览器起个名字显示在顶部。
 - 发布时 **不要关闭控制台页面**，各平台标签页要从这里读取视频文件，等上传开始后再关。
@@ -35,7 +35,3 @@ git remote add upstream https://github.com/leaperone/MultiPost-Extension.git   #
 git fetch upstream
 git merge upstream/main
 ```
-
-## drafts.json
-
-把草稿 JSON 放到本仓库 `gh-pages` 分支根目录的 `drafts.json`，控制台里点“同步仓库”即可导入。
