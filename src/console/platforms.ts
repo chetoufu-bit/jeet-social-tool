@@ -21,6 +21,8 @@ export interface PlatformDef {
   maxImages?: number;
   allowVideo?: boolean;
   tagsInDesc?: boolean;
+  /** sent directly from the console (not through MultiPost tabs) */
+  direct?: boolean;
   /** MultiPost platform name for each post type this platform supports */
   mps: Partial<Record<PostType, string>>;
 }
@@ -108,10 +110,31 @@ export const PLATFORMS: PlatformDef[] = [
     needVideo: true,
     tagsInDesc: true,
   },
+  {
+    // Telegram 走官方机器人接口直接发送（不经过 MultiPost）
+    key: "tg",
+    mps: { text: "TELEGRAM", image: "TELEGRAM", video: "TELEGRAM" },
+    name: "Telegram",
+    mp: "TELEGRAM",
+    account: "telegram",
+    color: "#229ed9",
+    kind: "dynamic",
+    hasTitle: false,
+    max: 4096,
+    tagStyle: "plain",
+    maxImages: 10,
+    tagsInDesc: true,
+    direct: true,
+  },
 ];
 
 export const PLATFORM_KEYS = PLATFORMS.map((p) => p.key);
-export const ALIASES: Record<string, string[]> = { xhs: ["rednote", "xiaohongshu"], youtube: ["yt"], tiktok: ["tt"] };
+export const ALIASES: Record<string, string[]> = {
+  xhs: ["rednote", "xiaohongshu"],
+  youtube: ["yt"],
+  tiktok: ["tt"],
+  tg: ["telegram"],
+};
 
 export interface Part {
   title: string;

@@ -8,6 +8,8 @@
  *   records the result and shows a notification.
  */
 
+import { sendTelegram, tgConfigFromSettings } from "./telegram";
+
 export const DB_NAME = "publisher";
 export const DB_VERSION = 3;
 export const ALARM_PREFIX = "jeet-job-";
@@ -264,6 +266,25 @@ export async function runJob(id: string, log: (msg: string) => void): Promise<Jo
       } catch (e) {
         results.push({ name: step.name, ok: false, msg: (e as Error).message });
         log(`${step.name} 失败：${(e as Error).message}`);
+        continue;
+      }
+      if (syncData.platforms?.[0]?.name === "TELEGRAM") {
+        log(`正在发送到 ${step.name}（${i + 1}/${job.steps.length}）…`);
+        const cfg = tgConfigFromSettings();
+        let errs: string[];
+        try {
+          errs = cfg ? await sendTelegram(cfg, data) : ["没有设置 Telegram 机器人或频道"];
+        } catch (e) {
+          errs = [(e as Error).message];
+        }
+        if (errs.length) {
+          results.push({ name: step.name, ok: false, msg: errs.join("；") });
+          log(`${step.name} 失败：${errs.join("；")}`);
+        } else {
+          results.push({ name: step.name, ok: true, auto: true });
+          log(`${step.name} 已发送`);
+        }
+        if (i < job.steps.length - 1) await sleep(GAP_MS);
         continue;
       }
       log(`正在打开 ${step.name}（${i + 1}/${job.steps.length}）…`);

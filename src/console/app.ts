@@ -7,6 +7,7 @@ import { PLATFORMS, POST_TYPES, buildData, specFor, supportsType, typeLabel } fr
  * as blob:/data: URLs.
  */
 import { MISSED_MS, clearAlarm, deleteJob, getJob, listJobs, openDb, putJob, scheduleAlarm } from "~console/scheduler";
+import { TG_VIDEO_MAX_BYTES, parseChats, sendTelegram, tgInfo } from "~console/telegram";
 import { refreshAccountInfo } from "~sync/account";
 import { setProbeAllowed } from "~sync/account/tab-probe";
 
@@ -120,7 +121,11 @@ export function initConsole(): void {
 
   /* ---------- 设置（每个浏览器各自一份） ---------- */
   // 默认 5 个平台全开；只用其中几个的话，可以在“平台设置”里关掉不用的
-  let settings = lsGet(LS_SETTINGS, null) || { space: "", color: COLORS[0], enabled: PLATFORMS.map((p) => p.key) };
+  let settings = lsGet(LS_SETTINGS, null) || {
+    space: "",
+    color: COLORS[0],
+    enabled: PLATFORMS.filter((p) => !p.direct).map((p) => p.key),
+  };
   const X_PREMIUM_MAX = 25000; // X Premium 长推文上限
   const xPremium = () => settings.xPremium !== false; // 默认按会员处理，可在“平台设置”里关掉
   const enabledPlatforms = () =>
@@ -228,8 +233,24 @@ export function initConsole(): void {
     }
   }
 
+  let tgAccount = null; // Telegram：显示机器人发往的频道名
+  const tgConfigured = () => !!(settings.tg?.token && parseChats(settings.tg.chats).length);
+  async function refreshTgAccount() {
+    if (!settings.enabled.includes("tg") || !tgConfigured()) {
+      tgAccount = null;
+      return;
+    }
+    try {
+      const info = await tgInfo(settings.tg);
+      tgAccount = { username: info.chats.join("、"), accountId: info.bot };
+    } catch (e) {
+      tgAccount = null;
+      log(`Telegram 机器人连接失败：${e.message}`);
+    }
+  }
   async function loadAccounts() {
     accountInfo = await readStoredAccounts();
+    if (tgAccount) accountInfo.telegram = tgAccount;
     renderAccounts();
     updateCardAccounts();
   }
@@ -240,7 +261,14 @@ export function initConsole(): void {
     $("#btnRefreshAcc").textContent = "刷新中…";
     if (!quick) log("正在检查各平台登录状态（小红书、Threads 会短暂打开一个后台标签页）…");
     setProbeAllowed(!quick);
-    const keys = [...new Set(enabledPlatforms().map((p) => p.account))];
+    const keys = [
+      ...new Set(
+        enabledPlatforms()
+          .filter((p) => !p.direct)
+          .map((p) => p.account),
+      ),
+    ];
+    const tgDone = refreshTgAccount();
     const failed = [];
     const withTimeout = (pr, ms) =>
       Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error("超时")), ms))]);
@@ -255,6 +283,7 @@ export function initConsole(): void {
         }
       }),
     );
+    await tgDone;
     setProbeAllowed(true);
     refreshingAccounts = false;
     $("#btnRefreshAcc").textContent = "刷新账号";
@@ -288,8 +317,9 @@ export function initConsole(): void {
   /* ---------- 草稿数据 ---------- */
   let drafts = lsGet(LS_DRAFTS, []);
   const prefs = lsGet(LS_PREFS, {});
-  prefs.selected = { xhs: true, threads: true, x: true, tiktok: true, youtube: true, ...(prefs.selected || {}) };
-  prefs.auto = { xhs: false, threads: false, x: false, tiktok: false, youtube: false, ...(prefs.auto || {}) };
+  // 新加的平台默认勾选“发布”，默认不自动发布
+  prefs.selected = { ...Object.fromEntries(PLATFORMS.map((p) => [p.key, true])), ...(prefs.selected || {}) };
+  prefs.auto = { ...Object.fromEntries(PLATFORMS.map((p) => [p.key, false])), ...(prefs.auto || {}) };
   prefs.withImg = prefs.withImg || {};
   prefs.withVideo = prefs.withVideo || {};
   let currentId = drafts[0]?.id || null;
@@ -324,7 +354,7 @@ export function initConsole(): void {
   }
   drafts = drafts.map(upgradeDraft);
 
-  const ALIASES = { xhs: ["rednote", "xiaohongshu"], youtube: ["yt"], tiktok: ["tt"] };
+  const ALIASES = { xhs: ["rednote", "xiaohongshu"], youtube: ["yt"], tiktok: ["tt"], tg: ["telegram"] };
   function normalizeDraft(raw) {
     const d = blankDraft();
     if (raw.id) d.id = String(raw.id);
@@ -572,7 +602,7 @@ export function initConsole(): void {
         <span class="acc">${n ? "@" + esc(n) : ""}</span>
         <div class="right">
           ${imgSwitch}${vidSwitch}
-          <label class="switch" title="不勾选时插件只填好内容，由你在平台页面上自己点发布"><input type="checkbox" data-auto ${prefs.auto[p.key] ? "checked" : ""}>自动发布</label>
+          ${p.direct ? `<span title="通过 Telegram 机器人直接发到频道">直接发送</span>` : `<label class="switch" title="不勾选时插件只填好内容，由你在平台页面上自己点发布"><input type="checkbox" data-auto ${prefs.auto[p.key] ? "checked" : ""}>自动发布</label>`}
           <label class="switch"><input type="checkbox" data-sel ${prefs.selected[p.key] ? "checked" : ""}>发布</label>
         </div>
       </div>
@@ -853,10 +883,12 @@ export function initConsole(): void {
         savePrefs();
         card.classList.toggle("off", !e.target.checked);
       };
-      $("[data-auto]", card).onchange = (e) => {
-        prefs.auto[p.key] = e.target.checked;
-        savePrefs();
-      };
+      const autoSw = $("[data-auto]", card);
+      if (autoSw)
+        autoSw.onchange = (e) => {
+          prefs.auto[p.key] = e.target.checked;
+          savePrefs();
+        };
       const imgSw = $("[data-img]", card);
       if (imgSw)
         imgSw.onchange = (e) => {
@@ -914,6 +946,7 @@ export function initConsole(): void {
   }
 
   /* ---------- 发布 ---------- */
+  const isAuto = (p) => !!p.direct || !!prefs.auto[p.key];
   function validate(d, targets) {
     const problems = [];
     const video = currentVideo(d);
@@ -928,6 +961,10 @@ export function initConsole(): void {
       if (p.hasTitle && /[<>]/.test(part.title) && p.key === "youtube") problems.push("YouTube 标题里不能有 < 或 >");
       if (p.needImage && !currentImages.length) problems.push("图文需要至少 1 张图");
       if (p.needVideo && !video) problems.push("视频内容还没有选视频");
+      if (p.key === "tg") {
+        if (!tgConfigured()) problems.push("Telegram 还没设置机器人和频道（右上角“平台设置”）");
+        if (video && video.size > TG_VIDEO_MAX_BYTES) problems.push("Telegram 机器人最多发 50MB 的视频");
+      }
     }
     return [...new Set(problems)];
   }
@@ -1110,17 +1147,18 @@ export function initConsole(): void {
     if (problems.length) return alert("发布前请先处理：\n\n· " + problems.join("\n· "));
 
     const space = settings.space || "";
-    const autos = targets.filter((p) => prefs.auto[p.key]).map((p) => p.name);
+    const tabTargets = targets.filter((p) => !p.direct);
+    const directTargets = targets.filter((p) => p.direct);
+    const tabAutos = tabTargets.filter((p) => isAuto(p)).map((p) => p.name);
+    const tabManual = tabTargets.filter((p) => !isAuto(p)).map((p) => p.name);
     const msg =
       (space ? `【当前空间：${space}】\n\n` : "") +
-      `将依次打开 ${targets.map((p) => p.name).join("、")} 的发布页并填好内容（请保持本页打开）。\n\n` +
-      (autos.length ? `会自动点击发布：${autos.join("、")}\n` : "") +
-      (targets.length > autos.length
-        ? `只填好不发布（需要你自己点）：${targets
-            .filter((p) => !prefs.auto[p.key])
-            .map((p) => p.name)
-            .join("、")}\n`
+      (tabTargets.length
+        ? `将依次打开 ${tabTargets.map((p) => p.name).join("、")} 的发布页并填好内容（请保持本页打开）。\n` +
+          (tabAutos.length ? `会自动点击发布：${tabAutos.join("、")}\n` : "") +
+          (tabManual.length ? `只填好不发布（需要你自己点）：${tabManual.join("、")}\n` : "")
         : "") +
+      (directTargets.length ? `直接发送（立即发出）：${directTargets.map((p) => p.name).join("、")}\n` : "") +
       "\n确定继续？";
     if (!confirm(msg)) return;
 
@@ -1155,22 +1193,34 @@ export function initConsole(): void {
         const plan = mediaPlan(p, d);
         if (plan.video && downloaded) plan.video = downloaded;
         const data = buildData(p, part, plan);
-        const syncData = { platforms: [{ name: p.mp }], isAutoPublish: !!prefs.auto[p.key], data };
-        log(`正在打开 ${p.name}（${i + 1}/${targets.length}）…`);
-        const r = await bg("MULTIPOST_EXTENSION_PUBLISH_NOW", syncData, 180000);
+        const syncData = { platforms: [{ name: p.mp }], isAutoPublish: isAuto(p), data };
+        let r;
+        if (p.direct) {
+          log(`正在发送到 ${p.name}（${i + 1}/${targets.length}）…`);
+          let errs;
+          try {
+            errs = await sendTelegram(settings.tg, data);
+          } catch (e) {
+            errs = [e.message];
+          }
+          r = errs.length ? { error: errs.join("；") } : { tabs: [] };
+        } else {
+          log(`正在打开 ${p.name}（${i + 1}/${targets.length}）…`);
+          r = await bg("MULTIPOST_EXTENSION_PUBLISH_NOW", syncData, 180000);
+        }
         if (!r || !r.tabs) {
-          const m = "打开发布页失败或超时";
+          const m = r?.error || "打开发布页失败或超时";
           results.push({ name: p.name, ok: false, msg: m });
           log(`${p.name} 发送失败：${m}`);
           toast(`${p.name} 发送失败`);
         } else {
-          results.push({ name: p.name, ok: true, auto: !!prefs.auto[p.key] });
+          results.push({ name: p.name, ok: true, auto: isAuto(p) });
           d.published = d.published || {};
           d.published[p.key] = Date.now();
           touch();
           const st = $(`.card[data-p="${p.key}"] .st`);
           if (st) {
-            st.textContent = "已打开并填写 " + fmtTime(d.published[p.key]);
+            st.textContent = (p.direct ? "已发送 " : "已打开并填写 ") + fmtTime(d.published[p.key]);
             st.classList.add("done");
           }
           renderList();
@@ -1184,7 +1234,7 @@ export function initConsole(): void {
       }
       log(
         "全部打开完成。请到各平台标签页确认结果" +
-          (targets.some((p) => !prefs.auto[p.key]) ? "，没勾自动发布的平台要你自己点发布" : "") +
+          (targets.some((p) => !isAuto(p)) ? "，没勾自动发布的平台要你自己点发布" : "") +
           "；视频开始上传前别关本页",
       );
     } finally {
@@ -1204,6 +1254,9 @@ export function initConsole(): void {
     draftSettings = JSON.parse(JSON.stringify(settings));
     $("#setSpace").value = draftSettings.space;
     $("#setXPremium").checked = draftSettings.xPremium !== false;
+    $("#setTgToken").value = draftSettings.tg?.token || "";
+    $("#setTgChats").value = draftSettings.tg?.chats || "";
+    $("#tgTestResult").textContent = "";
     renderSettings();
     $("#dlgSettings").showModal();
   }
@@ -1238,9 +1291,27 @@ export function initConsole(): void {
       );
   }
   $("#btnSettingsCancel").onclick = () => $("#dlgSettings").close();
+  $("#btnTgTest").onclick = async () => {
+    const cfg = { token: $("#setTgToken").value.trim(), chats: $("#setTgChats").value.trim() };
+    const out = $("#tgTestResult");
+    if (!cfg.token) {
+      out.textContent = "先填机器人 token";
+      return;
+    }
+    out.textContent = "连接中…";
+    try {
+      const info = await tgInfo(cfg);
+      out.textContent = `机器人 @${info.bot}` + (info.chats.length ? ` → ${info.chats.join("、")}` : "（还没填频道）");
+    } catch (e) {
+      out.textContent = "失败：" + e.message;
+    }
+  };
   $("#btnSettingsOk").onclick = () => {
     draftSettings.space = $("#setSpace").value.trim();
     draftSettings.xPremium = $("#setXPremium").checked;
+    draftSettings.tg = { token: $("#setTgToken").value.trim(), chats: $("#setTgChats").value.trim() };
+    if (draftSettings.tg.token && parseChats(draftSettings.tg.chats).length && !draftSettings.enabled.includes("tg"))
+      draftSettings.enabled = [...draftSettings.enabled, "tg"];
     if (!draftSettings.enabled.length) return alert("至少选一个平台。");
     draftSettings.enabled = PLATFORMS.map((p) => p.key).filter((k) => draftSettings.enabled.includes(k));
     settings = draftSettings;
