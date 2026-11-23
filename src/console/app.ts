@@ -1380,6 +1380,14 @@ export function initConsole(): void {
     renderHistory();
   };
   $("#btnSettings").onclick = openSettings;
+  $("#btnDashboard").onclick = async () => {
+    const url = chrome.runtime.getURL("tabs/dashboard.html");
+    const [open] = await chrome.tabs.query({ url });
+    if (open?.id) {
+      chrome.tabs.update(open.id, { active: true });
+      if (open.windowId) chrome.windows.update(open.windowId, { focused: true });
+    } else chrome.tabs.create({ url });
+  };
   $("#spaceBadge").onclick = openSettings;
   $("#btnRefreshAcc").onclick = () => refreshAccounts(false);
   $("#btnPublish").onclick = publish;

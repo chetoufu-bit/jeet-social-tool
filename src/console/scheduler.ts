@@ -11,7 +11,7 @@
 import { sendTelegram, tgConfigFromSettings } from "./telegram";
 
 export const DB_NAME = "publisher";
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 export const ALARM_PREFIX = "jeet-job-";
 /** A job that fires this much later than planned (computer asleep, Chrome closed) is not published automatically. */
 export const MISSED_MS = 30 * 60 * 1000;
@@ -22,7 +22,6 @@ export type JobStatus = "pending" | "running" | "done" | "failed" | "missed" | "
 export interface JobStep {
   key: string;
   name: string;
-  // biome-ignore lint/suspicious/noExplicitAny: SyncData with a video placeholder
   syncData: any;
 }
 
@@ -61,9 +60,26 @@ export function openDb(): Promise<IDBDatabase> {
         if (!db.objectStoreNames.contains("images")) db.createObjectStore("images");
         if (!db.objectStoreNames.contains("jobs")) db.createObjectStore("jobs", { keyPath: "id" });
         if (!db.objectStoreNames.contains("inbox")) db.createObjectStore("inbox", { keyPath: "id" });
+        // 数据看板
+        if (!db.objectStoreNames.contains("acct_snapshots"))
+          db.createObjectStore("acct_snapshots", { keyPath: "id", autoIncrement: true });
+        if (!db.objectStoreNames.contains("posts")) db.createObjectStore("posts", { keyPath: "key" });
+        if (!db.objectStoreNames.contains("collect_runs"))
+          db.createObjectStore("collect_runs", { keyPath: "id", autoIncrement: true });
       };
-      r.onsuccess = () => resolve(r.result);
-      r.onerror = () => reject(r.error);
+      r.onsuccess = () => {
+        const db = r.result;
+        // 新版本的页面要升级数据库时，让旧页面主动断开，避免卡住
+        db.onversionchange = () => {
+          db.close();
+          dbPromise = null;
+        };
+        resolve(db);
+      };
+      r.onerror = () => {
+        dbPromise = null;
+        reject(r.error);
+      };
     });
   }
   return dbPromise;
@@ -203,7 +219,6 @@ export async function runJob(id: string, log: (msg: string) => void): Promise<Jo
   await putJob(job);
   log(`开始执行「${job.topic}」：${job.steps.map((s) => s.name).join("、")}`);
 
-  // biome-ignore lint/suspicious/noExplicitAny: FileData
   let videoFile: any = null;
   const results: JobResult[] = [];
   try {
@@ -234,7 +249,6 @@ export async function runJob(id: string, log: (msg: string) => void): Promise<Jo
 
   // 远程图片/视频（AI 给的 https 链接）先在本页下载成 blob，避免平台页面跨域读不到
   const remote = new Map<string, string>();
-  // biome-ignore lint/suspicious/noExplicitAny: FileData
   const localize = async (f: any) => {
     if (!f || f.__video || typeof f.url !== "string" || !/^https?:\/\//i.test(f.url)) return f;
     if (!remote.has(f.url)) {
